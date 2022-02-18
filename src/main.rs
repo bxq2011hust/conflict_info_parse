@@ -2,9 +2,9 @@ use std::convert::TryInto;
 
 use log::{error, info};
 use regex::Regex;
-use serde::{Serialize};
-use serde_repr::Serialize_repr;
+use serde::Serialize;
 use serde_json::{Map, Value};
+use serde_repr::Serialize_repr;
 use sha3::Digest;
 use structopt::StructOpt;
 
@@ -27,6 +27,7 @@ struct Cli {
 #[repr(u8)]
 enum ConflictType {
     All = 0,
+    #[allow(dead_code)]
     Len,
     Env,
     Var,
@@ -87,6 +88,40 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
             value: Some(value as u32),
         });
     }
+    let mix_csv = path.join("Conflict_MixConflict.csv");
+    rdr = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .delimiter(b'\t')
+        .from_path(mix_csv.as_path())
+        .unwrap();
+    for r in rdr.records() {
+        let record = r.unwrap();
+        let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
+        let slot = slot_re.find(&record[2]).unwrap().as_str().to_string();
+        result.push(ConflictInfo {
+            kind: ConflictType::All,
+            selector,
+            slot,
+            value: None,
+        });
+    }
+    let call_contract_csv = path.join("Conflict_NoStorageAccessHasContractCalling.csv");
+    rdr = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .delimiter(b'\t')
+        .from_path(call_contract_csv.as_path())
+        .unwrap();
+    for r in rdr.records() {
+        let record = r.unwrap();
+        let selector = u32::from_str_radix(record[0].trim_start_matches("0x"), 16).unwrap();
+        result.push(ConflictInfo {
+            kind: ConflictType::All,
+            selector,
+            slot: "".to_string(),
+            value: None,
+        });
+    }
+
     let var_csv = path.join("Conflict_FunArgConflict.csv");
     rdr = csv::ReaderBuilder::new()
         .has_headers(false)
