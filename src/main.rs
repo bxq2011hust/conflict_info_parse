@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 
+use env_logger::Env;
 use log::{error, info};
 use regex::Regex;
 use serde::Serialize;
@@ -49,10 +50,11 @@ struct ConflictInfo {
     kind: ConflictType,
     #[serde(skip_serializing)]
     selector: u32,
-    slot: String,
-    /// for Var, the value is the index of calldata per 32Bytes, for Env, the value is EnvironmentType
     #[serde(skip_serializing_if = "Option::is_none")]
-    value: Option<u32>,
+    slot: Option<u32>,
+    /// for Var, the value is the index of calldata per 32Bytes, for Env, the value is EnvironmentType
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    value: Vec<u32>,
 }
 
 fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
@@ -70,22 +72,22 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
         // info!("env_csv {:?}, {} ", &record, record.len());
         let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
         let value = match record[2].as_ref() {
-            "CALLER" => EnvironmentType::Caller,
-            "ORIGIN" => EnvironmentType::Origin,
-            "TIMESTAMP" => EnvironmentType::Now,
-            "NUMBER" => EnvironmentType::BlockNumber,
-            "ADDRESS" => EnvironmentType::Address,
+            "CALLER" => vec![EnvironmentType::Caller as u32],
+            "ORIGIN" => vec![EnvironmentType::Origin as u32],
+            "TIMESTAMP" => vec![EnvironmentType::Now as u32],
+            "NUMBER" => vec![EnvironmentType::BlockNumber as u32],
+            "ADDRESS" => vec![EnvironmentType::Address as u32],
             _ => {
                 error!("Unknown environment type: {}", &record[2]);
-                EnvironmentType::Unknown
+                vec![EnvironmentType::Unknown as u32]
             }
         };
-        let slot = slot_re.find(&record[3]).unwrap().as_str().to_string();
+        let slot = u32::from_str_radix(slot_re.find(&record[3]).unwrap().as_str(), 16).unwrap();
         result.push(ConflictInfo {
             kind: ConflictType::Env,
             selector,
-            slot,
-            value: Some(value as u32),
+            slot: Some(slot),
+            value,
         });
     }
     let mix_csv = path.join("Conflict_MixConflict.csv");
@@ -97,12 +99,12 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
     for r in rdr.records() {
         let record = r.unwrap();
         let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
-        let slot = slot_re.find(&record[2]).unwrap().as_str().to_string();
+        let slot = u32::from_str_radix(slot_re.find(&record[2]).unwrap().as_str(), 16).unwrap();
         result.push(ConflictInfo {
             kind: ConflictType::All,
             selector,
-            slot,
-            value: None,
+            slot: Some(slot),
+            value: vec![],
         });
     }
     let call_contract_csv = path.join("Conflict_NoStorageAccessHasContractCalling.csv");
@@ -117,8 +119,8 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
         result.push(ConflictInfo {
             kind: ConflictType::All,
             selector,
-            slot: "".to_string(),
-            value: None,
+            slot: None,
+            value: vec![],
         });
     }
 
@@ -131,13 +133,13 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
     for r in rdr.records() {
         let record = r.unwrap();
         let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
-        let value = record[2].parse().unwrap();
-        let slot = slot_re.find(&record[3]).unwrap().as_str().to_string();
+        let value = vec![record[2].parse().unwrap()];
+        let slot = u32::from_str_radix(slot_re.find(&record[3]).unwrap().as_str(), 16).unwrap();
         result.push(ConflictInfo {
             kind: ConflictType::Var,
             selector,
-            slot,
-            value: Some(value),
+            slot: Some(slot),
+            value,
         });
     }
     let const_csv = path.join("Conflict_ConsConflict.csv");
@@ -149,12 +151,16 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
     for r in rdr.records() {
         let record = r.unwrap();
         let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
-        let slot = record[2].parse().unwrap();
+        let value = hex::decode(record[2].trim_start_matches("0x"))
+            .unwrap()
+            .iter_mut()
+            .map(|x| *x as u32)
+            .collect();
         result.push(ConflictInfo {
             kind: ConflictType::Const,
             selector,
-            slot,
-            value: None,
+            slot: None,
+            value,
         });
     }
     let none_csv = path.join("Conflict_NoConflict.csv");
@@ -169,8 +175,8 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
         result.push(ConflictInfo {
             kind: ConflictType::None,
             selector,
-            slot: "".to_string(),
-            value: None,
+            slot: None,
+            value: vec![],
         });
     }
     info!("parse conflicts completed");
@@ -220,7 +226,7 @@ fn get_method_id(signature: &str, gm: bool) -> u32 {
 }
 
 fn main() {
-    env_logger::init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("error")).init();
     let args = Cli::from_args();
     let abi_content = std::fs::read_to_string(&args.abi)
         .expect(format!("could not read file {}", args.abi.display()).as_str());
@@ -250,6 +256,7 @@ fn main() {
                         serde_json::to_value(method_conflicts).unwrap(),
                     );
                 }
+                method.insert("selector".into(), serde_json::to_value(method_id).unwrap());
             }
         });
     let new_abi = serde_json::to_string(&origin_abi).unwrap();
