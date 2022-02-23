@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 
+use colored::Colorize;
 use env_logger::Env;
 use log::{error, info};
 use regex::Regex;
@@ -82,7 +83,16 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
                 vec![EnvironmentType::Unknown as u32]
             }
         };
-        let slot = u32::from_str_radix(slot_re.find(&record[3]).unwrap().as_str(), 16).unwrap();
+
+        let slot = u32::from_str_radix(
+            slot_re
+                .find(&record[3])
+                .unwrap()
+                .as_str()
+                .trim_start_matches("0x"),
+            16,
+        )
+        .unwrap();
         result.push(ConflictInfo {
             kind: ConflictType::Env,
             selector,
@@ -99,7 +109,15 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
     for r in rdr.records() {
         let record = r.unwrap();
         let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
-        let slot = u32::from_str_radix(slot_re.find(&record[2]).unwrap().as_str(), 16).unwrap();
+        let slot = u32::from_str_radix(
+            slot_re
+                .find(&record[2])
+                .unwrap()
+                .as_str()
+                .trim_start_matches("0x"),
+            16,
+        )
+        .unwrap();
         result.push(ConflictInfo {
             kind: ConflictType::All,
             selector,
@@ -134,7 +152,15 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
         let record = r.unwrap();
         let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
         let value = vec![record[2].parse().unwrap()];
-        let slot = u32::from_str_radix(slot_re.find(&record[3]).unwrap().as_str(), 16).unwrap();
+        let slot = u32::from_str_radix(
+            slot_re
+                .find(&record[3])
+                .unwrap()
+                .as_str()
+                .trim_start_matches("0x"),
+            16,
+        )
+        .unwrap();
         result.push(ConflictInfo {
             kind: ConflictType::Var,
             selector,
@@ -151,7 +177,11 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
     for r in rdr.records() {
         let record = r.unwrap();
         let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
-        let value = hex::decode(record[2].trim_start_matches("0x"))
+        let mut value_hex = record[2].trim_start_matches("0x").to_string();
+        if value_hex.len() % 2 != 0 {
+            value_hex.insert(0, '0');
+        }
+        let value = hex::decode(value_hex)
             .unwrap()
             .iter_mut()
             .map(|x| *x as u32)
@@ -261,4 +291,8 @@ fn main() {
         });
     let new_abi = serde_json::to_string(&origin_abi).unwrap();
     std::fs::write(&args.abi, new_abi).unwrap();
+    print!(
+        "parse csv and rewrite abi successfully, new abi is saved to {}",
+        format!("{}", args.abi.display()).green()
+    );
 }
