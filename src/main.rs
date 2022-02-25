@@ -109,19 +109,19 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
     for r in rdr.records() {
         let record = r.unwrap();
         let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
-        let slot = u32::from_str_radix(
-            slot_re
-                .find(&record[2])
-                .unwrap()
-                .as_str()
-                .trim_start_matches("0x"),
-            16,
-        )
-        .unwrap();
+        // let slot = u32::from_str_radix(
+        //     slot_re
+        //         .find(&record[2])
+        //         .unwrap()
+        //         .as_str()
+        //         .trim_start_matches("0x"),
+        //     16,
+        // )
+        // .unwrap();
         result.push(ConflictInfo {
             kind: ConflictType::All,
             selector,
-            slot: Some(slot),
+            slot: None,
             value: vec![],
         });
     }
