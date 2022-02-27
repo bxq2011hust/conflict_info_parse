@@ -25,7 +25,7 @@ struct Cli {
     gm: bool,
 }
 
-#[derive(Debug, Serialize_repr, Clone)]
+#[derive(Debug, Serialize_repr,PartialOrd, Ord, PartialEq, Eq, Clone)]
 #[repr(u8)]
 enum ConflictType {
     All = 0,
@@ -46,7 +46,7 @@ enum EnvironmentType {
     Unknown,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, PartialOrd, Ord, PartialEq, Eq, Clone)]
 struct ConflictInfo {
     kind: ConflictType,
     #[serde(skip_serializing)]
@@ -210,6 +210,8 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
         });
     }
     info!("parse conflicts completed");
+    result.sort();
+    result.dedup();
     result
 }
 
