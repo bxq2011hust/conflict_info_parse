@@ -25,7 +25,7 @@ struct Cli {
     gm: bool,
 }
 
-#[derive(Debug, Serialize_repr,PartialOrd, Ord, PartialEq, Eq, Clone)]
+#[derive(Debug, Serialize_repr, PartialOrd, Ord, PartialEq, Eq, Clone)]
 #[repr(u8)]
 enum ConflictType {
     All = 0,
@@ -288,7 +288,19 @@ fn main() {
                         serde_json::to_value(method_conflicts).unwrap(),
                     );
                 }
-                method.insert("selector".into(), serde_json::to_value(method_id).unwrap());
+                if args.gm {
+                    method.insert(
+                        "selector".into(),
+                        serde_json::to_value(vec![get_method_id(&signature, false), method_id])
+                            .unwrap(),
+                    );
+                } else {
+                    method.insert(
+                        "selector".into(),
+                        serde_json::to_value(vec![method_id, get_method_id(&signature, true)])
+                            .unwrap(),
+                    );
+                }
             }
         });
     let new_abi = serde_json::to_string(&origin_abi).unwrap();
