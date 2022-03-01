@@ -215,35 +215,32 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
     result
 }
 
-fn get_method_signature(method: &Map<String, Value>) -> String {
-    let mut signature = String::from(method["name"].as_str().unwrap());
-    signature.push_str("(");
-    let inputs = method["inputs"].as_array().unwrap();
-    for (i, input) in inputs.iter().enumerate() {
-        let ty = input["type"].as_str().unwrap();
-        if i != 0 {
-            signature.push_str(",");
-        }
-        match ty {
-            "tuple" => {
-                signature.push_str("(");
-                let tuple_inputs = input["components"].as_array().unwrap();
-                for (j, tuple_input) in tuple_inputs.iter().enumerate() {
-                    let ty = tuple_input["type"].as_str().unwrap();
-                    signature.push_str(ty);
-                    if j != tuple_inputs.len() - 1 {
-                        signature.push_str(",");
-                    }
-                }
-                signature.push_str(")");
-            }
-            _ => {
-                signature.push_str(ty);
-            }
-        }
+fn parse_ty(ty_info: &Map<String, Value>) -> String {
+    const TUPLE_TY: &str = "tuple";
+
+    let ty = ty_info.get("type").unwrap().as_str().unwrap();
+    if ty.starts_with(TUPLE_TY) {
+        let components = ty_info.get("components").unwrap().as_array().unwrap();
+        let component_types = components
+            .iter()
+            .map(|component| parse_ty(component.as_object().unwrap()))
+            .collect::<Vec<String>>()
+            .join(",");
+        format!("({}){}", component_types, &ty[TUPLE_TY.len()..])
+    } else {
+        String::from(ty)
     }
-    signature.push_str(")");
-    signature
+}
+
+fn get_method_signature(method: &Map<String, Value>) -> String {
+    let fn_name = String::from(method["name"].as_str().unwrap());
+    let inputs = method["inputs"].as_array().unwrap();
+    let sig = inputs
+        .iter()
+        .map(|input| parse_ty(input.as_object().unwrap()))
+        .collect::<Vec<String>>()
+        .join(",");
+    format!("{}({})", fn_name, sig)
 }
 
 fn get_method_id(signature: &str, gm: bool) -> u32 {
@@ -309,4 +306,798 @@ fn main() {
         "parse csv and rewrite abi successfully, new abi is saved to {}",
         format!("{}", args.abi.display()).green()
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static ABI_STR: &'static str = r#"[
+        {
+            "inputs": [],
+            "stateMutability": "nonpayable",
+            "type": "constructor"
+        },
+        {
+            "inputs": [],
+            "name": "StrRead",
+            "outputs": [
+                {
+                    "internalType": "string",
+                    "name": "",
+                    "type": "string"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "StrWrite",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "name": "complexMap",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "a",
+                    "type": "uint256"
+                },
+                {
+                    "internalType": "uint256",
+                    "name": "b",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "complexMapReadWithConsKey",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "complexMapWriteWithConsKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "name": "dynaArray",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "dynaArrayReadWithConsKey",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "i",
+                    "type": "uint256"
+                }
+            ],
+            "name": "dynaArrayReadWithFuncArgKey",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "dynaArrayWriteWithConsKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "i",
+                    "type": "uint256"
+                }
+            ],
+            "name": "dynaArrayWriteWithFuncArgKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "fixedSizeVar",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "fixedSizeVarRead",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "fixedSizeVarWrite",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "x",
+                    "type": "uint256"
+                }
+            ],
+            "name": "noStorageAccessAndContractCalling",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "address",
+                    "name": "addr",
+                    "type": "address"
+                }
+            ],
+            "name": "noStorageAccessHasContractCalling",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "name": "simpleMap",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "address",
+                    "name": "",
+                    "type": "address"
+                }
+            ],
+            "name": "simpleMapForTestEnv",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "simpleMapIndirectWriteWithEnvKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "simpleMapReadWithConsKey",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "x",
+                    "type": "uint256"
+                }
+            ],
+            "name": "simpleMapReadWithEnvKey",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "i",
+                    "type": "uint256"
+                }
+            ],
+            "name": "simpleMapReadWithFuncArgKey",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "simpleMapWriteWithConsKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "simpleMapWriteWithEnvKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "i",
+                    "type": "uint256"
+                }
+            ],
+            "name": "simpleMapWriteWithFuncArgKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "x",
+                    "type": "uint256"
+                }
+            ],
+            "name": "simpleMapWriteWithMixKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "components": [
+                        {
+                            "internalType": "uint256",
+                            "name": "a",
+                            "type": "uint256"
+                        },
+                        {
+                            "internalType": "uint256",
+                            "name": "b",
+                            "type": "uint256"
+                        }
+                    ],
+                    "internalType": "struct S",
+                    "name": "s",
+                    "type": "tuple"
+                }
+            ],
+            "name": "simpleMapWriteWithPartStructFuncArgKey",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "x",
+                    "type": "uint256"
+                },
+                {
+                    "components": [
+                        {
+                            "internalType": "uint256",
+                            "name": "a",
+                            "type": "uint256"
+                        },
+                        {
+                            "internalType": "uint256",
+                            "name": "b",
+                            "type": "uint256"
+                        }
+                    ],
+                    "internalType": "struct S",
+                    "name": "s",
+                    "type": "tuple"
+                }
+            ],
+            "name": "simpleMapWriteWithPartStructFuncArgKey2",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "a",
+                    "type": "uint256"
+                },
+                {
+                    "components": [
+                        {
+                            "internalType": "uint256",
+                            "name": "a",
+                            "type": "uint256"
+                        },
+                        {
+                            "components": [
+                                {
+                                    "internalType": "string",
+                                    "name": "a",
+                                    "type": "string"
+                                },
+                                {
+                                    "components": [
+                                        {
+                                            "internalType": "uint256",
+                                            "name": "a",
+                                            "type": "uint256"
+                                        },
+                                        {
+                                            "internalType": "uint256",
+                                            "name": "b",
+                                            "type": "uint256"
+                                        }
+                                    ],
+                                    "internalType": "struct S",
+                                    "name": "b",
+                                    "type": "tuple"
+                                },
+                                {
+                                    "internalType": "string",
+                                    "name": "c",
+                                    "type": "string"
+                                }
+                            ],
+                            "internalType": "struct SS",
+                            "name": "b",
+                            "type": "tuple"
+                        },
+                        {
+                            "internalType": "uint256",
+                            "name": "c",
+                            "type": "uint256"
+                        }
+                    ],
+                    "internalType": "struct SSS",
+                    "name": "sss",
+                    "type": "tuple"
+                },
+                {
+                    "internalType": "uint256",
+                    "name": "c",
+                    "type": "uint256"
+                }
+            ],
+            "name": "simpleMapWriteWithPartStructFuncArgKey3",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "x",
+                    "type": "uint256"
+                },
+                {
+                    "components": [
+                        {
+                            "internalType": "string",
+                            "name": "a",
+                            "type": "string"
+                        },
+                        {
+                            "components": [
+                                {
+                                    "internalType": "uint256",
+                                    "name": "a",
+                                    "type": "uint256"
+                                },
+                                {
+                                    "internalType": "uint256",
+                                    "name": "b",
+                                    "type": "uint256"
+                                }
+                            ],
+                            "internalType": "struct S",
+                            "name": "b",
+                            "type": "tuple"
+                        },
+                        {
+                            "internalType": "string",
+                            "name": "c",
+                            "type": "string"
+                        }
+                    ],
+                    "internalType": "struct SS",
+                    "name": "ss",
+                    "type": "tuple"
+                }
+            ],
+            "name": "simpleMapWriteWithPartStructFuncArgKey4",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "a",
+                    "type": "uint256"
+                },
+                {
+                    "internalType": "uint256[]",
+                    "name": "b",
+                    "type": "uint256[]"
+                },
+                {
+                    "internalType": "uint256",
+                    "name": "c",
+                    "type": "uint256"
+                }
+            ],
+            "name": "simpleMapWriteWithPartStructFuncArgKey5",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "a",
+                    "type": "uint256"
+                },
+                {
+                    "internalType": "uint256[5]",
+                    "name": "b",
+                    "type": "uint256[5]"
+                },
+                {
+                    "internalType": "uint256",
+                    "name": "c",
+                    "type": "uint256"
+                }
+            ],
+            "name": "simpleMapWriteWithPartStructFuncArgKey6",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "simpleStruct",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "a",
+                    "type": "uint256"
+                },
+                {
+                    "internalType": "uint256",
+                    "name": "b",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "simpleStructRead",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "simpleStructWrite",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "str",
+            "outputs": [
+                {
+                    "internalType": "string",
+                    "name": "",
+                    "type": "string"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+        }
+    ]"#;
+
+    #[test]
+    fn test_simple_selector() {
+        let origin_abi: Value = serde_json::from_str(ABI_STR).unwrap();
+        let functions = origin_abi
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|v| {
+                let value = v.as_object().unwrap();
+                return value.contains_key("name")
+                    && value.contains_key("type")
+                    && value["type"].as_str().unwrap() == "function";
+            })
+            .collect::<Vec<&Value>>();
+
+        let str_read = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "StrRead")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let str_read_sig = get_method_signature(str_read);
+        assert_eq!(str_read_sig, "StrRead()".to_string());
+        let str_read_selector = get_method_id(&str_read_sig, false);
+        assert_eq!(
+            str_read_selector,
+            u32::from_str_radix("4db0cdb2", 16).unwrap()
+        );
+
+        let str_write = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "StrWrite")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let str_write_sig = get_method_signature(str_write);
+        assert_eq!(str_write_sig, "StrWrite()".to_string());
+        let str_write_selector = get_method_id(&str_write_sig, false);
+        assert_eq!(
+            str_write_selector,
+            u32::from_str_radix("7ea33fd1", 16).unwrap()
+        );
+
+        let complex_map = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "complexMap")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let complex_map_sig = get_method_signature(complex_map);
+        assert_eq!(complex_map_sig, "complexMap(uint256)".to_string());
+        let complex_map_selector = get_method_id(&complex_map_sig, false);
+        assert_eq!(
+            complex_map_selector,
+            u32::from_str_radix("3e49c8f4", 16).unwrap()
+        );
+        let simple_map_write_with_part_struct_func_arg_key = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "simpleMapWriteWithPartStructFuncArgKey")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let simple_map_write_with_part_struct_func_arg_key_sig =
+            get_method_signature(simple_map_write_with_part_struct_func_arg_key);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_sig,
+            "simpleMapWriteWithPartStructFuncArgKey((uint256,uint256))".to_string()
+        );
+        let simple_map_write_with_part_struct_func_arg_key_selector =
+            get_method_id(&simple_map_write_with_part_struct_func_arg_key_sig, false);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_selector,
+            u32::from_str_radix("c158e6ef", 16).unwrap()
+        );
+        let simple_map_write_with_part_struct_func_arg_key = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "simpleMapWriteWithPartStructFuncArgKey2")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let simple_map_write_with_part_struct_func_arg_key_sig =
+            get_method_signature(simple_map_write_with_part_struct_func_arg_key);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_sig,
+            "simpleMapWriteWithPartStructFuncArgKey2(uint256,(uint256,uint256))".to_string()
+        );
+        let simple_map_write_with_part_struct_func_arg_key_selector =
+            get_method_id(&simple_map_write_with_part_struct_func_arg_key_sig, false);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_selector,
+            u32::from_str_radix("e407048d", 16).unwrap()
+        );
+        let simple_map_write_with_part_struct_func_arg_key = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "simpleMapWriteWithPartStructFuncArgKey3")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let simple_map_write_with_part_struct_func_arg_key_sig =
+            get_method_signature(simple_map_write_with_part_struct_func_arg_key);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_sig,
+            "simpleMapWriteWithPartStructFuncArgKey3(uint256,(uint256,(string,(uint256,uint256),string),uint256),uint256)"
+                .to_string()
+        );
+        let simple_map_write_with_part_struct_func_arg_key_selector =
+            get_method_id(&simple_map_write_with_part_struct_func_arg_key_sig, false);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_selector,
+            u32::from_str_radix("3894de57", 16).unwrap()
+        );
+
+        let simple_map_write_with_part_struct_func_arg_key = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "simpleMapWriteWithPartStructFuncArgKey4")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let simple_map_write_with_part_struct_func_arg_key_sig =
+            get_method_signature(simple_map_write_with_part_struct_func_arg_key);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_sig,
+            "simpleMapWriteWithPartStructFuncArgKey4(uint256,(string,(uint256,uint256),string))"
+                .to_string()
+        );
+        let simple_map_write_with_part_struct_func_arg_key_selector =
+            get_method_id(&simple_map_write_with_part_struct_func_arg_key_sig, false);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_selector,
+            u32::from_str_radix("9f440047", 16).unwrap()
+        );
+
+        let simple_map_write_with_part_struct_func_arg_key = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "simpleMapWriteWithPartStructFuncArgKey5")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let simple_map_write_with_part_struct_func_arg_key_sig =
+            get_method_signature(simple_map_write_with_part_struct_func_arg_key);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_sig,
+            "simpleMapWriteWithPartStructFuncArgKey5(uint256,uint256[],uint256)".to_string()
+        );
+        let simple_map_write_with_part_struct_func_arg_key_selector =
+            get_method_id(&simple_map_write_with_part_struct_func_arg_key_sig, false);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_selector,
+            u32::from_str_radix("5a0495fd", 16).unwrap()
+        );
+
+        let simple_map_write_with_part_struct_func_arg_key = functions
+            .iter()
+            .find(|v| v["name"].as_str().unwrap() == "simpleMapWriteWithPartStructFuncArgKey6")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        let simple_map_write_with_part_struct_func_arg_key_sig =
+            get_method_signature(simple_map_write_with_part_struct_func_arg_key);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_sig,
+            "simpleMapWriteWithPartStructFuncArgKey6(uint256,uint256[5],uint256)".to_string()
+        );
+        let simple_map_write_with_part_struct_func_arg_key_selector =
+            get_method_id(&simple_map_write_with_part_struct_func_arg_key_sig, false);
+        assert_eq!(
+            simple_map_write_with_part_struct_func_arg_key_selector,
+            u32::from_str_radix("d07c919a", 16).unwrap()
+        );
+    }
 }
