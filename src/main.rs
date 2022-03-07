@@ -108,7 +108,7 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
         .unwrap();
     for r in rdr.records() {
         let record = r.unwrap();
-        let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
+        let selector = u32::from_str_radix(record[0].trim_start_matches("0x"), 16).unwrap();
         // let slot = u32::from_str_radix(
         //     slot_re
         //         .find(&record[2])
@@ -168,11 +168,47 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
             value,
         });
     }
-    let const_csv = path.join("Conflict_ConsConflict.csv");
+
+    let dynamic_const_csv = path.join("Conflict_DynaVarConsConflict.csv");
     rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .delimiter(b'\t')
-        .from_path(const_csv.as_path())
+        .from_path(dynamic_const_csv.as_path())
+        .unwrap();
+    for r in rdr.records() {
+        let record = r.unwrap();
+        let selector = u32::from_str_radix(record[1].trim_start_matches("0x"), 16).unwrap();
+        let slot = u32::from_str_radix(
+            slot_re
+                .find(&record[2])
+                .unwrap()
+                .as_str()
+                .trim_start_matches("0x"),
+            16,
+        )
+        .unwrap();
+        let mut value_hex = record[3].trim_start_matches("0x").to_string();
+        if value_hex.len() % 2 != 0 {
+            value_hex.insert(0, '0');
+        }
+        let value = hex::decode(value_hex)
+            .unwrap()
+            .iter_mut()
+            .map(|x| *x as u32)
+            .collect();
+        result.push(ConflictInfo {
+            kind: ConflictType::Const,
+            selector,
+            slot: Some(slot),
+            value,
+        });
+    }
+
+    let basic_const_csv = path.join("Conflict_BasicVarConsConflict.csv");
+    rdr = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .delimiter(b'\t')
+        .from_path(basic_const_csv.as_path())
         .unwrap();
     for r in rdr.records() {
         let record = r.unwrap();
