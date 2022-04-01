@@ -62,7 +62,7 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
     let mut result = Vec::new();
 
     let env_csv = path.join("Conflict_EnvConflict.csv");
-    let slot_re = Regex::new(r"0x(\d+)").unwrap();
+    let slot_re = Regex::new(r"0x([\da-f]+)").unwrap();
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .delimiter(b'\t')
@@ -155,7 +155,7 @@ fn parse_conflict_info(path: &std::path::Path) -> Vec<ConflictInfo> {
         let slot = u32::from_str_radix(
             slot_re
                 .find(&record[3])
-                .unwrap()
+                .expect(&format!("slot not found {:?}", &record[3]))
                 .as_str()
                 .trim_start_matches("0x"),
             16,
